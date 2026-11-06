@@ -535,7 +535,7 @@ footer .footer-below {
   color: #00BFA6;
 }
 #booking-quote {
-  display: none;
+  display: block;
   background: #f8f8f8;
   padding: 20px;
   border-radius: 5px;

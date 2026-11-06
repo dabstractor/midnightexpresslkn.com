@@ -27,6 +27,13 @@
     const GOOGLE_FORM_URL = "https://docs.google.com/forms/d/e/1FAIpQLSelLJ8Yqj8jHXreIB3DW8MvsBUtHea8DB7UTjyaYkM3Q2RbTA/formResponse";
 
     /**
+     * New calendar Apps Script web app (/exec). Leave as PASTE_EXEC_URL_HERE until
+     * Donald deploys Code.gs; while placeholder, availability still uses BOOKINGS_API_URL
+     * and calendar POST is a no-op so the form keeps working as today.
+     */
+    const NEW_SCRIPT_URL = 'PASTE_EXEC_URL_HERE';
+
+    /**
      * Booking buffer rules:
      * - Each ride takes 2 hours total (starting 15 min before pickup)
      * - Block from 1h59m BEFORE pickup time (allows previous ride to complete)
@@ -93,11 +100,21 @@
      * @param {string} datetimeStr - ISO datetime string (e.g., "2025-11-01T18:00:00.000Z")
      * @returns {object} - {date: string (YYYY-MM-DD), hours: number, minutes: number}
      */
+    function formatLocalYmd(date) {
+        var y = date.getFullYear();
+        var m = String(date.getMonth() + 1);
+        var d = String(date.getDate());
+        if (m.length < 2) m = '0' + m;
+        if (d.length < 2) d = '0' + d;
+        return y + '-' + m + '-' + d;
+    }
+
     function parseBookingDateTime(datetimeStr) {
         const date = new Date(datetimeStr);
         return {
-            date: date.toISOString().split('T')[0], // Extract YYYY-MM-DD
-            hours: date.getHours(), // Local time hours
+            // Local calendar date (not UTC) so evening ET rides stay on the right day
+            date: formatLocalYmd(date),
+            hours: date.getHours(),
             minutes: date.getMinutes()
         };
     }
@@ -480,6 +497,53 @@
     }
 
 
+
+    function isNewScriptReady() {
+        return typeof NEW_SCRIPT_URL === 'string' &&
+            NEW_SCRIPT_URL.indexOf('http') === 0 &&
+            NEW_SCRIPT_URL.indexOf('PASTE_EXEC_URL_HERE') === -1;
+    }
+
+    /**
+     * Best-effort mirror to the new calendar Apps Script after the Google Form succeeds.
+     * no-cors + fire-and-forget so a calendar failure never blocks the customer request.
+     * No-op while NEW_SCRIPT_URL is still the placeholder.
+     */
+    function postBookingToCalendar(formData) {
+        if (!isNewScriptReady()) {
+            return Promise.resolve({ skipped: true });
+        }
+        var payload = {
+            name: formData.name,
+            phone: formData.phone,
+            email: formData.email || '',
+            pickupDate: formData.pickupDate,
+            pickupTime: formData.pickupTime,
+            pickupAddress: formData.pickupAddress,
+            destinationAddress: formData.destinationAddress,
+            passengers: formData.passengers,
+            specialNotes: formData.specialNotes || '',
+            airportTrip: formData.airportTrip,
+            flightNumber: formData.flightNumber || '',
+            checkingBags: formData.checkingBags || 'No',
+            roundTrip: formData.roundTrip || 'No',
+            returnDate: formData.returnDate || '',
+            returnTime: formData.returnTime || ''
+        };
+        return fetch(NEW_SCRIPT_URL, {
+            method: 'POST',
+            mode: 'no-cors',
+            credentials: 'omit',
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+            body: JSON.stringify(payload)
+        }).then(function() {
+            return { delivered: 'opaque' };
+        }).catch(function(err) {
+            console.warn('Calendar mirror failed (request still sent to owner):', err);
+            return { skipped: true, error: String(err && err.message ? err.message : err) };
+        });
+    }
+
     const CUSTOMER_RATE_PER_MILE = 2.75;
     const CUSTOMER_CARD_SURCHARGE_PCT = 3;
 
@@ -829,7 +893,7 @@
         }
 
         // Get bookings for the search date
-        const bookings = await getBookingsForDate(searchDate.toISOString().split('T')[0]);
+        const bookings = await getBookingsForDate(formatLocalYmd(searchDate));
 
         // Find the first available time slot
         let searchTime = new Date(searchDate);
@@ -960,7 +1024,7 @@
             onChange: function(selectedDates, dateStr, instance) {
                 if (selectedDates.length > 0) {
                     const date = selectedDates[0];
-                    const dateForInput = date.toISOString().split('T')[0];
+                    const dateForInput = formatLocalYmd(date);
 
                     // Update timeline when date changes
                     updateTimeline(dateForInput);
@@ -1006,7 +1070,7 @@
                 onChange: function(selectedDates, dateStr, instance) {
                     if (selectedDates.length > 0) {
                         const date = selectedDates[0];
-                        const dateForInput = date.toISOString().split('T')[0];
+                        const dateForInput = formatLocalYmd(date);
 
                         // Update return timeline when date changes
                         updateReturnTimeline(dateForInput);
@@ -1161,7 +1225,7 @@
                 value = value.substring(0, 10);
             }
 
-            // Format as (123) 456 - 7890
+            // Format as (123) 456-7890
             let formattedValue = '';
             if (value.length > 0) {
                 if (value.length <= 3) {
@@ -1169,7 +1233,7 @@
                 } else if (value.length <= 6) {
                     formattedValue = '(' + value.substring(0, 3) + ') ' + value.substring(3);
                 } else {
-                    formattedValue = '(' + value.substring(0, 3) + ') ' + value.substring(3, 6) + ' - ' + value.substring(6);
+                    formattedValue = '(' + value.substring(0, 3) + ') ' + value.substring(3, 6) + '-' + value.substring(6);
                 }
             }
 
@@ -1503,6 +1567,13 @@
                 // Handle dual submission for round-trip bookings
                 const submissions = await handleDualSubmission(formData);
 
+                // Best-effort calendar mirror (no-op until NEW_SCRIPT_URL is pasted)
+                try {
+                    await postBookingToCalendar(formData);
+                } catch (calendarErr) {
+                    console.warn('Calendar mirror error ignored:', calendarErr);
+                }
+
                 // Invalidate cache after successful submission so future validations fetch fresh data
                 cachedBookings = [];
                 lastFetchTime = null;
@@ -1596,7 +1667,7 @@
                         }
 
                         // Update timeline
-                        const dateForInput = newDefaultDateTime.toISOString().split('T')[0];
+                        const dateForInput = formatLocalYmd(newDefaultDateTime);
                         updateTimeline(dateForInput);
 
                         // Scroll back to form
@@ -1637,7 +1708,7 @@
         });
 
         // Pre-fetch bookings, then initialize timeline with default date
-        const todayForTimeline = defaultDateTime.toISOString().split('T')[0];
+        const todayForTimeline = formatLocalYmd(defaultDateTime);
         fetchBookings().then(function() {
             // Now that bookings are cached, update the timeline
             updateTimeline(todayForTimeline, function(bookings) {
@@ -1648,6 +1719,7 @@
         // Initialize passenger capacity display
         updatePassengerCapacity();
         updateQuoteDisplay();
+        $('#booking-quote').show();
     });
 
     })(jQuery);
