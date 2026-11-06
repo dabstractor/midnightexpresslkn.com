@@ -479,6 +479,19 @@
         return validateDateTimeSync(dateStr, timeStr, bookings);
     }
 
+
+    const CUSTOMER_RATE_PER_MILE = 2.75;
+    const CUSTOMER_CARD_SURCHARGE_PCT = 3;
+
+    function updateQuoteDisplay() {
+        var $details = $('#quote-details');
+        if (!$details.length) return;
+        var html = '<strong>$' + CUSTOMER_RATE_PER_MILE.toFixed(2) + ' per mile</strong> (cash).';
+        html += ' Card payments add ' + CUSTOMER_CARD_SURCHARGE_PCT + '%.';
+        html += '<br><span style="color:#666;font-size:13px;">Mileage total is confirmed by phone.</span>';
+        $details.html(html);
+    }
+
     // =================================================================
     // CONDITIONAL FIELD LOGIC
     // =================================================================
@@ -1628,6 +1641,7 @@
 
         // Initialize passenger capacity display
         updatePassengerCapacity();
+        updateQuoteDisplay();
     });
 
     })(jQuery);
