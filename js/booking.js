@@ -16,10 +16,10 @@
     // =================================================================
 
     /**
-     * URL to fetch existing bookings from Google Apps Script
-     * Returns booking data including airportFlight field
+     * URL to fetch busy pickup starts from calendar Apps Script (GET → [{datetime}]).
+     * Points at the same deployment as NEW_SCRIPT_URL.
      */
-    const BOOKINGS_API_URL = "https://script.google.com/macros/s/AKfycbyOvvMBD8hFeJCv9zRoHPvsoneQov3cO0hREU-RLALRtrsa6V8q7n-i_xiYdBoDrQHQ/exec";
+    const BOOKINGS_API_URL = "https://script.google.com/macros/s/AKfycbwlkfdyZt-C3ttWjMfvtG042i9w8jsNWeEHq_EAzEWWfxClUuz2Bkh0TT-czGjgeR2E_Q/exec";
 
     /**
      * Google Form submission URL (from the form action)
@@ -27,11 +27,10 @@
     const GOOGLE_FORM_URL = "https://docs.google.com/forms/d/e/1FAIpQLSelLJ8Yqj8jHXreIB3DW8MvsBUtHea8DB7UTjyaYkM3Q2RbTA/formResponse";
 
     /**
-     * New calendar Apps Script web app (/exec). Leave as PASTE_EXEC_URL_HERE until
-     * Donald deploys Code.gs; while placeholder, availability still uses BOOKINGS_API_URL
-     * and calendar POST is a no-op so the form keeps working as today.
+     * Calendar Apps Script web app (/exec): POST mirrors bookings onto Google Calendar.
+     * Same deployment as BOOKINGS_API_URL (GET busy slots). No-op only if placeholder.
      */
-    const NEW_SCRIPT_URL = 'PASTE_EXEC_URL_HERE';
+    const NEW_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwlkfdyZt-C3ttWjMfvtG042i9w8jsNWeEHq_EAzEWWfxClUuz2Bkh0TT-czGjgeR2E_Q/exec';
 
     /**
      * Booking buffer rules:
@@ -507,7 +506,7 @@
     /**
      * Best-effort mirror to the new calendar Apps Script after the Google Form succeeds.
      * no-cors + fire-and-forget so a calendar failure never blocks the customer request.
-     * No-op while NEW_SCRIPT_URL is still the placeholder.
+     * Best-effort calendar mirror after Google Form success (no-cors).
      */
     function postBookingToCalendar(formData) {
         if (!isNewScriptReady()) {
@@ -1567,7 +1566,7 @@
                 // Handle dual submission for round-trip bookings
                 const submissions = await handleDualSubmission(formData);
 
-                // Best-effort calendar mirror (no-op until NEW_SCRIPT_URL is pasted)
+                // Best-effort calendar mirror to Apps Script
                 try {
                     await postBookingToCalendar(formData);
                 } catch (calendarErr) {
