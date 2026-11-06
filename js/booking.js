@@ -686,19 +686,15 @@
 
         const submissionPromises = submissions.map(submission => submitToGoogleSheets(submission));
         const results = await Promise.allSettled(submissionPromises);
-
         console.log('Submission results:', results);
-
-        // Since submitToGoogleSheets always resolves (due to CORS), we can't detect real failures
-        // All we can do is log and hope the submissions went through
-        results.forEach((result, idx) => {
-            if (result.status === 'fulfilled') {
-                console.log('Submission ' + (idx + 1) + ' completed (CORS prevents confirmation)');
-            } else {
-                console.error('Submission ' + (idx + 1) + ' failed:', result.reason);
-            }
+        const failures = results.filter(function(r) { return r.status === 'rejected'; });
+        if (failures.length > 0) {
+            const reason = (failures[0].reason && failures[0].reason.message) ? failures[0].reason.message : 'Submission failed';
+            throw new Error(reason);
+        }
+        results.forEach(function(result, idx) {
+            console.log('Submission ' + (idx + 1) + ' finished:', result.value);
         });
-
         return submissions;
     }
 
@@ -717,73 +713,70 @@
      * @param {Object} submissionData - Booking data to submit
      * @returns {Promise} - Submission promise
      */
+    function buildGoogleFormData(submissionData) {
+        var googleFormData = new FormData();
+        var formattedPickupDate = formatDateForGoogleForms(submissionData.pickupDate);
+        var pickupDateTime = formattedPickupDate + ' ' + submissionData.pickupTime;
+        googleFormData.append('entry.131833412', submissionData.name);
+        googleFormData.append('entry.776900145', submissionData.phone);
+        googleFormData.append('entry.121804187', submissionData.email || '');
+        googleFormData.append('entry.1592582104', pickupDateTime);
+        googleFormData.append('entry.1137073125', submissionData.pickupAddress);
+        googleFormData.append('entry.1747359283', submissionData.destinationAddress);
+        googleFormData.append('entry.240227114', submissionData.passengers);
+        googleFormData.append('entry.1761921696', submissionData.specialNotes || '');
+        googleFormData.append('entry.1268043435', submissionData.airportTrip);
+        googleFormData.append('entry.1389653467', submissionData.flightNumber || '');
+        googleFormData.append('entry.2044186606', submissionData.checkingBags || 'No');
+        if (submissionData.specialRequirements && submissionData.specialRequirements.length > 0) {
+            submissionData.specialRequirements.forEach(function(req) {
+                googleFormData.append('entry.1055055925', req);
+            });
+        }
+        if (submissionData.otherRequirementText) {
+            googleFormData.append('entry.1055055925.other_option_response', submissionData.otherRequirementText);
+        }
+        return googleFormData;
+    }
+
+    /**
+     * Submit to Google Forms (cross-origin).
+     * Can detect: network failure, abort, timeout → error UI + call message.
+     * Cannot read Google acceptance: opaque no-cors response → "Request received. We'll call to confirm".
+     * Never claim booked/confirmed.
+     */
     function submitToGoogleSheets(submissionData) {
         return new Promise(function(resolve, reject) {
-            var googleFormData = new FormData();
-
-            // Debug: Log what we're about to send
-            console.log('=== FORM SUBMISSION DEBUG ===');
-            console.log('Submission Data:', submissionData);
-
-            // Format date as MM/DD/YYYY (Google Forms format)
-            var formattedPickupDate = formatDateForGoogleForms(submissionData.pickupDate);
-            var pickupDateTime = formattedPickupDate + ' ' + submissionData.pickupTime;
-
-            googleFormData.append('entry.131833412', submissionData.name);
-            googleFormData.append('entry.776900145', submissionData.phone);
-            googleFormData.append('entry.121804187', submissionData.email || '');
-            googleFormData.append('entry.1592582104', pickupDateTime); // Combined Pickup Date/Time in MM/DD/YYYY HH:MM:SS
-            googleFormData.append('entry.1137073125', submissionData.pickupAddress);
-            googleFormData.append('entry.1747359283', submissionData.destinationAddress);
-            googleFormData.append('entry.240227114', submissionData.passengers);
-            googleFormData.append('entry.1761921696', submissionData.specialNotes || ''); // Notes
-            googleFormData.append('entry.1268043435', submissionData.airportTrip);
-
-            // Flight Number (entry.1389653467)
-            console.log('DEBUG: flightNumber =', submissionData.flightNumber);
-            googleFormData.append('entry.1389653467', submissionData.flightNumber || '');
-
-            // Checking Bags (entry.2044186606)
-            console.log('DEBUG: checkingBags =', submissionData.checkingBags);
-            googleFormData.append('entry.2044186606', submissionData.checkingBags || 'No');
-
-            // Special requirements checkboxes
-            if (submissionData.specialRequirements && submissionData.specialRequirements.length > 0) {
-                submissionData.specialRequirements.forEach(function(req) {
-                    googleFormData.append('entry.1055055925', req);
-                });
-            }
-
-            // Other requirement text (if "Other" was checked)
-            if (submissionData.otherRequirementText) {
-                googleFormData.append('entry.1055055925.other_option_response', submissionData.otherRequirementText);
-            }
-
-            // Debug: Log FormData contents
-            console.log('FormData entries:');
-            for (var pair of googleFormData.entries()) {
-                console.log(pair[0] + ': ' + pair[1]);
-            }
-            console.log('=== END DEBUG ===');
-
-            // Submit to Google Forms
-            $.ajax({
-                url: GOOGLE_FORM_URL,
-                type: 'POST',
-                data: googleFormData,
-                processData: false,
-                contentType: false,
-                cache: false,
-                complete: function(xhr) {
-                    console.log('Submit complete - Status:', xhr.status, 'Response:', xhr.responseText);
-                    // Google Forms always returns an error due to CORS, but the submission actually works
-                    resolve();
-                },
-                error: function(xhr, status, error) {
-                    console.error('Submit error - Status:', xhr.status, 'Error:', error, 'Response:', xhr.responseText);
-                    // This is expected due to CORS, but we still consider it a success
-                    resolve();
+            var googleFormData = buildGoogleFormData(submissionData);
+            var controller = new AbortController();
+            var timedOut = false;
+            var timer = setTimeout(function() {
+                timedOut = true;
+                controller.abort();
+            }, 20000);
+            fetch(GOOGLE_FORM_URL, {
+                method: 'POST',
+                body: googleFormData,
+                mode: 'no-cors',
+                credentials: 'omit',
+                redirect: 'follow',
+                signal: controller.signal
+            }).then(function(response) {
+                clearTimeout(timer);
+                if (response && (response.type === 'opaque' || response.ok || response.status === 0 || response.type === 'opaqueredirect')) {
+                    resolve({ delivered: 'opaque' });
+                    return;
                 }
+                if (response && response.status >= 200 && response.status < 400) {
+                    resolve({ delivered: 'ok', status: response.status });
+                    return;
+                }
+                reject(new Error('Submission failed (HTTP ' + (response && response.status) + ')'));
+            }).catch(function(err) {
+                clearTimeout(timer);
+                if (timedOut) { reject(new Error('Submission timed out')); return; }
+                if (err && err.name === 'AbortError') { reject(new Error('Submission was cancelled')); return; }
+                reject(err || new Error('Network error submitting booking'));
             });
         });
     }
@@ -1497,12 +1490,12 @@
                 // Create appropriate success message
                 let successHtml =
                     '<div class="alert alert-success">' +
-                    '<h4><i class="fa fa-check-circle"></i> Booking Request' + (formData.roundTrip === 'Yes' ? 's' : '') + ' Submitted!</h4>' +
+                    '<h4><i class="fa fa-check-circle"></i> Request received. We\'ll call to confirm</h4>' +
                     '<p>Thank you, <strong>' + formData.name + '</strong>!</p>';
 
                 if (formData.roundTrip === 'Yes') {
                     successHtml +=
-                        '<p>Your round-trip booking requests have been received:</p>' +
+                        '<p>Your round-trip requests were sent:</p>' +
                         '<ul style="text-align: left; display: inline-block;">' +
                         '<li><strong>Outbound:</strong> ' + formatDisplayDate(formData.pickupDate) + ' at ' + formData.pickupTime + '</li>' +
                         '<li><strong>Return:</strong> ' + formatDisplayDate(formData.returnDate) + ' at ' + formData.returnTime + '</li>' +
@@ -1510,7 +1503,7 @@
                         '<p>We will call you at <strong>' + formData.phone + '</strong> to confirm both bookings.</p>';
                 } else {
                     successHtml +=
-                        '<p>Your booking request for <strong>' + formatDisplayDate(formData.pickupDate) + '</strong> at <strong>' + formData.pickupTime + '</strong> has been received.</p>' +
+                        '<p>Your request for <strong>' + formatDisplayDate(formData.pickupDate) + '</strong> at <strong>' + formData.pickupTime + '</strong> was sent.</p>' +
                         '<p>We will call you at <strong>' + formData.phone + '</strong> to confirm your booking.</p>';
                 }
 
@@ -1595,7 +1588,7 @@
                 const errorHtml =
                     '<div class="alert alert-danger">' +
                     '<h4><i class="fa fa-exclamation-triangle"></i> Submission Error</h4>' +
-                    '<p>There was an error submitting your booking request. Please try again or call us directly at (980) 422-9125.</p>' +
+                    '<p>We could not send your booking request. Please call (980) 422-9125 to book.</p>' +
                     '<p><strong>Error:</strong> ' + error.message + '</p>' +
                     '</div>';
 
