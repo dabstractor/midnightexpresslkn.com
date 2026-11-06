@@ -41,6 +41,7 @@
      */
     let cachedBookings = [];
     let lastFetchTime = null;
+    let bookingsFetchOk = false;
     const CACHE_DURATION_MS = 60000; // 1 minute
 
     /**
@@ -72,14 +73,15 @@
                 cache: false,
                 success: function(bookings) {
                     console.log('Fetched bookings:', bookings);
-                    cachedBookings = bookings;
+                    cachedBookings = Array.isArray(bookings) ? bookings : [];
                     lastFetchTime = Date.now();
-                    resolve(bookings);
+                    bookingsFetchOk = true;
+                    resolve(cachedBookings);
                 },
                 error: function(xhr, status, error) {
                     console.error('Error fetching bookings:', status, error);
-                    console.warn('Using cached or empty booking data');
-                    // Return cached data as fallback, or empty array
+                    console.warn('Availability fetch failed; not claiming all times available');
+                    bookingsFetchOk = false;
                     resolve(cachedBookings.length > 0 ? cachedBookings : []);
                 }
             });
@@ -320,7 +322,10 @@
                 return booking.date === dateStr;
             });
 
-        if (bookings.length === 0) {
+        if (!bookingsFetchOk) {
+            $('#timeline-instruction').hide();
+            $('#timeline-visual').html('<p style="text-align: center; color: #666;">Call (980) 422-9125 to confirm availability</p>');
+        } else if (bookings.length === 0) {
             $('#timeline-instruction').hide();
             $('#timeline-visual').html('<p style="text-align: center; color: #27AE60; font-weight: bold;">All times available!</p>');
         } else {
@@ -362,7 +367,10 @@
                 return booking.date === dateStr;
             });
 
-        if (bookings.length === 0) {
+        if (!bookingsFetchOk) {
+            $('#return-timeline-instruction').hide();
+            $('#return-timeline-visual').html('<p style="text-align: center; color: #666;">Call (980) 422-9125 to confirm availability</p>');
+        } else if (bookings.length === 0) {
             $('#return-timeline-instruction').hide();
             $('#return-timeline-visual').html('<p style="text-align: center; color: #27AE60; font-weight: bold;">All times available!</p>');
         } else {
