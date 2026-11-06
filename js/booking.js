@@ -622,16 +622,22 @@
             $capacityMsg.text('');
         }
 
-        // Update passenger input max attribute
-        $('#booking-passengers').attr('max', maxCapacity);
+        // Update passenger input max attribute (hard owner cap 4)
+        $('#booking-passengers').attr('max', 4);
 
         // Validate current passenger count
         const currentPassengers = parseInt($('#booking-passengers').val()) || 1;
-        if (currentPassengers > maxCapacity) {
+        if (currentPassengers > 4) {
+            $('#booking-passengers').val(4);
+            $capacityMsg.text('For more than 4 passengers, please call (980) 422-9125.').show();
+            $capacityMsg.css('color', '#d9534f');
+            $('#booking-passengers').closest('.form-group').addClass('has-error');
+        } else if (currentPassengers > maxCapacity) {
             $('#booking-passengers').val(maxCapacity);
             $capacityMsg.css('color', '#d9534f');
         } else {
             $capacityMsg.css('color', '#666');
+            $('#booking-passengers').closest('.form-group').removeClass('has-error');
         }
     }
 
