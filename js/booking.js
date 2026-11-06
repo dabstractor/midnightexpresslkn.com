@@ -19,7 +19,7 @@
      * URL to fetch busy pickup starts from calendar Apps Script (GET → [{datetime}]).
      * Points at the same deployment as NEW_SCRIPT_URL.
      */
-    const BOOKINGS_API_URL = "https://script.google.com/macros/s/AKfycbwlkfdyZt-C3ttWjMfvtG042i9w8jsNWeEHq_EAzEWWfxClUuz2Bkh0TT-czGjgeR2E_Q/exec";
+    const BOOKINGS_API_URL = "https://script.google.com/macros/s/AKfycbyUfrtvd64b5GKnkaHONJ7YDGGAXAAWGTxYK3lBASguhUjlO_iXXHiM4-iflODhJTYP4w/exec";
 
     /**
      * Google Form submission URL (from the form action)
@@ -30,7 +30,7 @@
      * Calendar Apps Script web app (/exec): POST mirrors bookings onto Google Calendar.
      * Same deployment as BOOKINGS_API_URL (GET busy slots). No-op only if placeholder.
      */
-    const NEW_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwlkfdyZt-C3ttWjMfvtG042i9w8jsNWeEHq_EAzEWWfxClUuz2Bkh0TT-czGjgeR2E_Q/exec';
+    const NEW_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyUfrtvd64b5GKnkaHONJ7YDGGAXAAWGTxYK3lBASguhUjlO_iXXHiM4-iflODhJTYP4w/exec';
 
     /**
      * Booking buffer rules:
