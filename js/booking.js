@@ -543,7 +543,7 @@
      * - Airport checked bags = 1 full seat
      */
     function calculatePassengerCapacity(requirements) {
-        let maxCapacity = 6; // Base capacity
+        let maxCapacity = 4; // Owner cap: more than 4 must call
 
         // Check if we have both wheelchair and car seat (they share 1 seat)
         const hasMobilityAids = requirements.wheelchair || requirements.carseat;
@@ -573,7 +573,8 @@
             checkingBags: checkingBags
         };
 
-        const maxCapacity = calculatePassengerCapacity(requirements);
+        let maxCapacity = calculatePassengerCapacity(requirements);
+        if (maxCapacity > 4) { maxCapacity = 4; }
 
         // Update or create capacity message
         let $capacityMsg = $('#passenger-capacity-message');
@@ -1349,7 +1350,11 @@
             const maxCapacity = calculatePassengerCapacity(requirements);
             const passengerCount = parseInt(formData.passengers) || 1;
 
-            if (passengerCount > maxCapacity) {
+            if (passengerCount > 4) {
+                errors.push('For more than 4 passengers, please call (980) 422-9125.');
+                $('#booking-passengers').closest('.form-group').addClass('has-error').find('.help-block').text('For more than 4 passengers, please call (980) 422-9125.').show();
+                isValid = false;
+            } else if (passengerCount > maxCapacity) {
                 errors.push('Maximum ' + maxCapacity + ' passengers allowed with selected special requirements');
                 $('#booking-passengers').closest('.form-group').addClass('has-error');
                 isValid = false;
