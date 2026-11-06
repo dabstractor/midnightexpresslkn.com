@@ -620,22 +620,22 @@
      * Dynamic Passenger Capacity Calculation
      * Calculate max passengers based on special requirements
      *
-     * Rules:
-     * - Wheelchair = 1 seat
-     * - Car seat = 1 seat
-     * - Wheelchair + car seat = 1 seat (they can share a space)
-     * - Airport checked bags = 1 full seat
+     * Owner rules (Donald):
+     * - Base online max 5 with carry-on only
+     * - Checked bags = -1 seat (max 4 with bags)
+     * - Wheelchair and/or car seat = -1 seat total (same as live: they share one seat)
+     * - Over the resulting max: do not book online; call (980) 422-9125
      */
     function calculatePassengerCapacity(requirements) {
-        let maxCapacity = 4; // Owner cap: more than 4 must call
+        let maxCapacity = 5; // Carry-on online max; more than this must call
 
-        // Check if we have both wheelchair and car seat (they share 1 seat)
+        // Wheelchair and/or car seat share one seat reduction (live behavior)
         const hasMobilityAids = requirements.wheelchair || requirements.carseat;
         if (hasMobilityAids) {
-            maxCapacity -= 1; // Subtract 1 seat for either wheelchair OR car seat (or both, since they share)
+            maxCapacity -= 1;
         }
 
-        // Checked bags always take a full seat
+        // Checked bags take a full seat → max 4 with bags (before mobility)
         if (requirements.checkingBags) {
             maxCapacity -= 1;
         }
@@ -657,8 +657,8 @@
             checkingBags: checkingBags
         };
 
-        let maxCapacity = calculatePassengerCapacity(requirements);
-        if (maxCapacity > 4) { maxCapacity = 4; }
+        const maxCapacity = calculatePassengerCapacity(requirements);
+        const callMsg = 'For more than ' + maxCapacity + ' passengers, please call (980) 422-9125.';
 
         // Update or create capacity message
         let $capacityMsg = $('#passenger-capacity-message');
@@ -685,19 +685,17 @@
             $capacityMsg.text('');
         }
 
-        // Update passenger input max attribute (hard owner cap 4)
-        $('#booking-passengers').attr('max', 4);
+        // Allow typing above the online max so we can show the call-us message
+        // (effective limit is still maxCapacity via validation / submit block).
+        $('#booking-passengers').attr('max', 20);
 
-        // Validate current passenger count
+        // Validate current passenger count — do not clamp (clamping re-fires input and
+        // would wipe the call message). Over limit: show call-us, block online book.
         const currentPassengers = parseInt($('#booking-passengers').val()) || 1;
-        if (currentPassengers > 4) {
-            $('#booking-passengers').val(4);
-            $capacityMsg.text('For more than 4 passengers, please call (980) 422-9125.').show();
+        if (currentPassengers > maxCapacity) {
+            $capacityMsg.text(callMsg).show();
             $capacityMsg.css('color', '#d9534f');
             $('#booking-passengers').closest('.form-group').addClass('has-error');
-        } else if (currentPassengers > maxCapacity) {
-            $('#booking-passengers').val(maxCapacity);
-            $capacityMsg.css('color', '#d9534f');
         } else {
             $capacityMsg.css('color', '#666');
             $('#booking-passengers').closest('.form-group').removeClass('has-error');
@@ -1440,13 +1438,10 @@
             const maxCapacity = calculatePassengerCapacity(requirements);
             const passengerCount = parseInt(formData.passengers) || 1;
 
-            if (passengerCount > 4) {
-                errors.push('For more than 4 passengers, please call (980) 422-9125.');
-                $('#booking-passengers').closest('.form-group').addClass('has-error').find('.help-block').text('For more than 4 passengers, please call (980) 422-9125.').show();
-                isValid = false;
-            } else if (passengerCount > maxCapacity) {
-                errors.push('Maximum ' + maxCapacity + ' passengers allowed with selected special requirements');
-                $('#booking-passengers').closest('.form-group').addClass('has-error');
+            if (passengerCount > maxCapacity) {
+                const callMsg = 'For more than ' + maxCapacity + ' passengers, please call (980) 422-9125.';
+                errors.push(callMsg);
+                $('#booking-passengers').closest('.form-group').addClass('has-error').find('.help-block').text(callMsg).show();
                 isValid = false;
             }
 
